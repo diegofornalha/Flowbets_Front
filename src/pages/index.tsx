@@ -1,63 +1,23 @@
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import type { NextPage } from "next";
 import { useState } from "react";
-import { BettingCard } from "../components/BettingCard";
-import { useReadContract } from "wagmi";
-import Image, { StaticImageData } from "next/image";
-
-import patriots from "@/src/public/assets/patriots.png";
-import jaguars from "@/src/public/assets/jaguars.png";
+import Image from "next/image";
+import { Button } from "../components/ui/button";
 import flow from "@/src/public/assets/flow.png";
-
-import { BETTING_ABI } from "../constants/abis";
-import { BETTING_CONTRACT_ADDRESS } from "../constants/addresses";
-
-// Mantemos apenas os logos necessários
-const teamLogos: Record<string, StaticImageData> = {
-  Patriots: patriots,
-  Jaguars: jaguars,
-};
+import { GamesModal } from "../components/GamesModal";
+import { AdminModal } from "../components/AdminModal";
 
 const Home: NextPage = () => {
-  const { data } = useReadContract({
-    address: BETTING_CONTRACT_ADDRESS,
-    abi: BETTING_ABI,
-    functionName: "viewVolume",
-    args: [],
-  });
-
-  const tokenA = data?.[0] ? parseInt(data[0].toString()) : 0;
-  const tokenB = data?.[1] ? parseInt(data[1].toString()) : 0;
-  const total = tokenA + tokenB;
-  const priceA = 100 * (tokenA / (tokenA + tokenB));
-  const priceB = 100 * (tokenB / (tokenA + tokenB));
-
-  // Mantemos apenas o jogo que tem dados da blockchain
-  const nflGames = [
-    {
-      time: "6:30 AM",
-      volume: `$${total}`,
-      teams: [
-        { name: "Patriots", record: "1-5", price: priceA },
-        { name: "Jaguars", record: "1-5", price: priceB },
-      ],
-    },
-  ];
-
-  const [selectedGame, setSelectedGame] = useState<{
-    game: string;
-    team: string;
-  } | null>(null);
-
-  const selectTeam = (game: string, team: string) => {
-    setSelectedGame({ game, team });
-  };
+  const [showCategories, setShowCategories] = useState(false);
+  const [showAdminMenu, setShowAdminMenu] = useState(false);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
 
   return (
     <>
       <div
         style={{
-          backgroundColor: "white",
+          backgroundColor: "#f0f2f5",
           minHeight: "100vh",
           display: "flex",
           flexDirection: "column",
@@ -65,6 +25,7 @@ const Home: NextPage = () => {
           position: "relative",
         }}
       >
+        {/* Header */}
         <div
           style={{
             position: "absolute",
@@ -74,113 +35,177 @@ const Home: NextPage = () => {
           }}
         >
           <ConnectButton />
-        </div>
-
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            whiteSpace: "nowrap",
-            marginBottom: "20px",
-          }}
-        >
-          <Image
-            src={flow}
-            alt="Flow logo"
-            width={36}
-            height={36}
+          
+          {/* Container para Botões */}
+          <div 
             style={{
-              marginRight: "10px",
-            }}
-          />
-          <h1
-            style={{
-              fontSize: "24px",
-              fontWeight: "bold",
-              color: "#333",
-              margin: 0,
+              marginTop: "10px",
+              position: "relative",
+              display: "flex",
+              gap: "10px"
             }}
           >
-            FlowBets
-          </h1>
-        </div>
-
-        <div
-          style={{
-            backgroundColor: "#1c1e22",
-            borderRadius: "10px",
-            padding: "20px",
-            width: "45%",
-            margin: "0 auto",
-            color: "white",
-            boxShadow: "0 4px 12px rgba(0, 0, 0, 0.1)",
-          }}
-        >
-          <h2 style={{ marginBottom: "20px" }}>NFL Games</h2>
-
-          {nflGames.map((game, index) => (
-            <div
-              key={index}
-              style={{
-                marginBottom: "20px",
-                borderBottom: "1px solid #374151",
-                paddingBottom: "10px",
-              }}
-            >
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  marginBottom: "10px",
-                  color: "#9ca3af",
+            {/* Botão Categorias */}
+            <div style={{ position: "relative", flex: 1 }}>
+              <Button
+                onClick={() => {
+                  setShowCategories(!showCategories);
+                  setShowAdminMenu(false);
                 }}
+                className={`
+                  bg-[#ffffff] 
+                  text-[#333] 
+                  border-2
+                  border-[#ffffff] 
+                  w-full 
+                  transition-all 
+                  duration-200 
+                  hover:scale-[1.02] 
+                  hover:bg-[#ffffff]
+                  rounded-2xl
+                  shadow-sm
+                  font-bold
+                  ${showCategories ? 'scale-[0.98]' : 'scale-100'}
+                `}
               >
-                <span>{game.time}</span>
-                <span>{game.volume} Vol.</span>
-              </div>
-
-              <div style={{ display: "flex", justifyContent: "space-between" }}>
-                {game.teams.map((team, teamIndex) => (
-                  <button
-                    key={teamIndex}
-                    onClick={() => selectTeam(game.time, team.name)}
-                    style={{
-                      backgroundColor:
-                        selectedGame?.game === game.time &&
-                        selectedGame?.team === team.name
-                          ? "#007aff"
-                          : "#1e293b",
-                      color: "white",
-                      padding: "10px",
-                      borderRadius: "5px",
-                      border: "none",
-                      width: "48%",
-                      cursor: "pointer",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "space-between",
+                Categorias
+              </Button>
+              
+              {showCategories && (
+                <div
+                  style={{
+                    position: "absolute",
+                    right: 0,
+                    marginTop: "5px",
+                    backgroundColor: "#ffffff",
+                    borderRadius: "16px",
+                    padding: "8px",
+                    width: "100%",
+                    boxShadow: "0 4px 12px rgba(0, 0, 0, 0.1)",
+                    border: "2px solid #ffffff"
+                  }}
+                >
+                  <Button
+                    className="w-full text-left bg-transparent hover:bg-[#f5f5f5] justify-start text-[#333] rounded-xl font-bold"
+                    variant="ghost"
+                    onClick={() => {
+                      setIsModalOpen(true);
+                      setShowCategories(false);
                     }}
                   >
-                    <Image
-                      src={teamLogos[team.name]}
-                      alt={`${team.name} logo`}
-                      style={{
-                        width: "24px",
-                        height: "24px",
-                        marginRight: "10px",
-                      }}
-                    />
-                    <span>
-                      {team.name} ({team.record})
-                    </span>
-                    <span>{team.price.toFixed(2)}¢</span>
-                  </button>
-                ))}
-              </div>
+                    ⚽ NFL Games
+                  </Button>
+                </div>
+              )}
             </div>
-          ))}
+
+            {/* Botão Painel Admin com Submenu */}
+            <div style={{ position: "relative" }}>
+              <Button
+                className={`
+                  bg-[#ffffff] 
+                  text-[#333] 
+                  border-2
+                  border-[#ffffff] 
+                  transition-all 
+                  duration-200 
+                  hover:scale-[1.02] 
+                  hover:bg-[#ffffff]
+                  rounded-2xl
+                  shadow-sm
+                  font-bold
+                  px-4
+                  ${showAdminMenu ? 'scale-[0.98]' : 'scale-100'}
+                `}
+                onClick={() => {
+                  setShowAdminMenu(!showAdminMenu);
+                  setShowCategories(false);
+                }}
+              >
+                Painel Admin
+              </Button>
+
+              {showAdminMenu && (
+                <div
+                  style={{
+                    position: "absolute",
+                    right: 0,
+                    marginTop: "5px",
+                    backgroundColor: "#ffffff",
+                    borderRadius: "16px",
+                    padding: "8px",
+                    width: "100%",
+                    minWidth: "150px",
+                    boxShadow: "0 4px 12px rgba(0, 0, 0, 0.1)",
+                    border: "2px solid #ffffff"
+                  }}
+                >
+                  <Button
+                    className="w-full text-left bg-transparent hover:bg-[#f5f5f5] justify-start text-[#333] rounded-xl font-bold"
+                    variant="ghost"
+                    onClick={() => {
+                      setIsAdminModalOpen(true);
+                      setShowAdminMenu(false);
+                    }}
+                  >
+                    🎲 placeBets
+                  </Button>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
-        <BettingCard />
+
+        {/* Hero Section */}
+        <div className="max-w-6xl mx-auto mt-20 text-center">
+          <div className="flex justify-center mb-8">
+            <Image
+              src={flow}
+              alt="Flow logo"
+              width={80}
+              height={80}
+            />
+          </div>
+          
+          <h1 className="text-5xl font-bold mb-6 text-[#333]">
+            FlowBets
+          </h1>
+          
+          <p className="text-xl text-[#666] mb-8 max-w-2xl mx-auto">
+            Apostas esportivas descentralizadas na blockchain Flow. 
+            Transparente, seguro e sem intermediários.
+          </p>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-12">
+            <div className="bg-white p-6 rounded-lg shadow-sm border border-[#ddd]">
+              <h3 className="text-xl font-semibold mb-3 text-[#333]">Transparente</h3>
+              <p className="text-[#666]">Todas as apostas e odds são registradas na blockchain, garantindo total transparência.</p>
+            </div>
+
+            <div className="bg-white p-6 rounded-lg shadow-sm border border-[#ddd]">
+              <h3 className="text-xl font-semibold mb-3 text-[#333]">Sem Intermediários</h3>
+              <p className="text-[#666]">Apostas peer-to-peer sem custos de intermediação.</p>
+            </div>
+
+            <div className="bg-white p-6 rounded-lg shadow-sm border border-[#ddd]">
+              <h3 className="text-xl font-semibold mb-3 text-[#333]">Pagamento Instantâneo</h3>
+              <p className="text-[#666]">Receba seus ganhos automaticamente através de smart contracts.</p>
+            </div>
+          </div>
+
+          <Button
+            onClick={() => setIsModalOpen(true)}
+            className="bg-[#007aff] text-white hover:bg-[#0056b3] text-lg px-8 py-3"
+          >
+            Começar a Apostar
+          </Button>
+        </div>
+
+        {/* Games Modal */}
+        <GamesModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} />
+        
+        {/* Admin Modal */}
+        <AdminModal isOpen={isAdminModalOpen} onClose={() => setIsAdminModalOpen(false)} />
       </div>
     </>
   );

@@ -58,7 +58,7 @@ export const BETTING_ABI = [
     ],
     name: "placeBets",
     outputs: [],
-    stateMutability: "nonpayable",
+    stateMutability: "payable",
     type: "function",
   },
   {
@@ -71,7 +71,7 @@ export const BETTING_ABI = [
     ],
     name: "placeBetsJag",
     outputs: [],
-    stateMutability: "nonpayable",
+    stateMutability: "payable",
     type: "function",
   },
 ] as const; 
