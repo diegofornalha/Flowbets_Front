@@ -19,6 +19,8 @@ import {
   FormMessage,
 } from "./ui/form";
 import { Input } from "./ui/input";
+import { MATCHES_ABI, TEAMS_ABI } from "../constants/abis";
+import { MATCHES_CONTRACT_ADDRESS, TEAMS_CONTRACT_ADDRESS } from "../constants/addresses";
 
 const formSchema = z.object({
   amount: z.string().min(1).max(200),
@@ -38,44 +40,82 @@ type Tab = "games" | "outcome";
 
 export function GamesModal({ isOpen, onClose }: GamesModalProps) {
   const [activeTab, setActiveTab] = useState<Tab>("games");
-  const { data } = useReadContract({
-    address: BETTING_CONTRACT_ADDRESS,
-    abi: BETTING_ABI,
-    functionName: "viewVolume",
-    args: [],
+  const [selectedTeam, setSelectedTeam] = useState<string | null>(null);
+  const [isSuccess, setIsSuccess] = useState(false);
+  const [notification, setNotification] = useState<{
+    type: 'error' | 'warning' | null;
+    message: string;
+  }>({ type: null, message: '' });
+
+  // Endereço do confronto atual
+  const [currentMatchAddress] = useState<`0x${string}`>("0xEf68a13c9737a6cFD8c75740Ab56B147A44eC722");
+
+  // Buscar volumes do match atual
+  const { data: matchVolumes } = useReadContract({
+    address: MATCHES_CONTRACT_ADDRESS,
+    abi: MATCHES_ABI,
+    functionName: "getMatchVolumes",
+    args: [currentMatchAddress],
   });
 
+  // Buscar dados do match
+  const { data: matchData } = useReadContract({
+    address: MATCHES_CONTRACT_ADDRESS,
+    abi: MATCHES_ABI,
+    functionName: "getMatchByAddress",
+    args: [currentMatchAddress],
+  });
+
+  // Buscar dados dos times
+  const { data: teamAData } = useReadContract({
+    address: TEAMS_CONTRACT_ADDRESS,
+    abi: TEAMS_ABI,
+    functionName: "getTeamByAddress",
+    args: [matchData?.teamA],
+    enabled: !!matchData?.teamA,
+  });
+
+  const { data: teamBData } = useReadContract({
+    address: TEAMS_CONTRACT_ADDRESS,
+    abi: TEAMS_ABI,
+    functionName: "getTeamByAddress",
+    args: [matchData?.teamB],
+    enabled: !!matchData?.teamB,
+  });
+
+  // Cálculos de volume e preços
+  const volumeA = matchVolumes?.[0] ? Number(matchVolumes[0]) : 0;
+  const volumeB = matchVolumes?.[1] ? Number(matchVolumes[1]) : 0;
+  const totalVolume = volumeA + volumeB;
+  const matchPriceA = totalVolume > 0 ? 100 * (volumeA / totalVolume) : 50;
+  const matchPriceB = totalVolume > 0 ? 100 * (volumeB / totalVolume) : 50;
+
+  const matchGames = [
+    {
+      time: matchData?.isActive ? "Ativo" : "Encerrado",
+      volume: `${(totalVolume / 1e18).toFixed(2)}`,
+      teams: [
+        { 
+          name: teamAData?.name || "Time A", 
+          price: matchPriceA,
+          address: matchData?.teamA
+        },
+        { 
+          name: teamBData?.name || "Time B", 
+          price: matchPriceB,
+          address: matchData?.teamB
+        },
+      ],
+    },
+  ];
+
   const { writeContract } = useWriteContract();
-  const [selectedTeam, setSelectedTeam] = useState<string | null>(null);
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
       amount: "",
     },
   });
-
-  const tokenA = data?.[0] ? parseInt(data[0].toString()) : 0;
-  const tokenB = data?.[1] ? parseInt(data[1].toString()) : 0;
-  const total = tokenA + tokenB;
-  const priceA = 100 * (tokenA / (tokenA + tokenB));
-  const priceB = 100 * (tokenB / (tokenA + tokenB));
-
-  const nflGames = [
-    {
-      time: "6:30 AM",
-      volume: `$${total}`,
-      teams: [
-        { name: "Patriots", record: "1-5", price: priceA },
-        { name: "Jaguars", record: "1-5", price: priceB },
-      ],
-    },
-  ];
-
-  const [isSuccess, setIsSuccess] = useState(false);
-  const [notification, setNotification] = useState<{
-    type: 'error' | 'warning' | null;
-    message: string;
-  }>({ type: null, message: '' });
 
   async function onSubmit(values: z.infer<typeof formSchema>) {
     try {
@@ -90,12 +130,15 @@ export function GamesModal({ isOpen, onClose }: GamesModalProps) {
       }
 
       const amountInWei = BigInt(parseFloat(values.amount) * 1e18);
+      const teamAddress = selectedTeam === "Patriots" ? 
+        "0x90Bd69898f064683c300CA90d64f81a088b1248B" : 
+        "0xc2e963b8E2776853Fbb09B0146Cc90932102C9d7";
 
       await writeContract({
         address: BETTING_CONTRACT_ADDRESS,
         abi: BETTING_ABI,
-        functionName: selectedTeam === "Patriots" ? "placeBets" : "placeBetsJag",
-        args: [amountInWei],
+        functionName: "placeBet",
+        args: [teamAddress],
         value: amountInWei
       });
 
@@ -158,7 +201,7 @@ export function GamesModal({ isOpen, onClose }: GamesModalProps) {
           }`}
           variant="ghost"
         >
-          ⚽ NFL Games
+          🏈 {teamAData?.name} vs {teamBData?.name}
         </Button>
         <Button
           onClick={() => setActiveTab("outcome")}
@@ -177,7 +220,7 @@ export function GamesModal({ isOpen, onClose }: GamesModalProps) {
         {activeTab === "games" ? (
           <div className="bg-white rounded-lg p-6">
             <div className="space-y-4">
-              {nflGames.map((game, index) => (
+              {matchGames.map((game, index) => (
                 <div
                   key={index}
                   className="border-b border-[#eee] pb-4 last:border-0"
@@ -200,17 +243,15 @@ export function GamesModal({ isOpen, onClose }: GamesModalProps) {
                       >
                         <div className="flex items-center">
                           <Image
-                            src={teamLogos[team.name]}
+                            src={teamLogos[team.name] || patriots} // fallback para logo padrão
                             alt={`${team.name} logo`}
                             width={24}
                             height={24}
                             className="mr-3"
                           />
-                          <span>
-                            {team.name} ({team.record})
-                          </span>
+                          <span>{team.name}</span>
                         </div>
-                        <span>{team.price.toFixed(2)}¢</span>
+                        <span>{team.price.toFixed(2)}</span>
                       </button>
                     ))}
                   </div>
@@ -228,7 +269,7 @@ export function GamesModal({ isOpen, onClose }: GamesModalProps) {
                     name="amount"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel className="text-[#333] text-sm font-medium">Amount (FLOW)</FormLabel>
+                        <FormLabel className="text-[#333] text-sm font-medium">Valor (FLOW)</FormLabel>
                         <FormControl>
                           <Input
                             type="number"
@@ -253,27 +294,33 @@ export function GamesModal({ isOpen, onClose }: GamesModalProps) {
 
               <div className="space-y-3 bg-[#f5f5f5] p-4 rounded-lg border border-[#ddd]">
                 <div className="flex justify-between text-[#666]">
-                  <span>Amount in FLOW:</span>
-                  <span>{formatAmount(form.watch("amount") || "0")} FLOW</span>
+                  <span>Valor:</span>
+                  <span>{formatAmount(form.watch("amount") || "0")}</span>
                 </div>
                 <div className="flex justify-between text-[#666]">
-                  <span>Avg Price:</span>
-                  <span>{selectedTeam === "Patriots" ? `${priceA}¢` : `${priceB}¢`}</span>
-                </div>
-                <div className="flex justify-between text-[#666]">
-                  <span>Shares:</span>
-                  <span>{((Number(form.watch("amount") || 0) * 100) / priceA).toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between text-[#666]">
-                  <span>Potential return:</span>
+                  <span>Preço:</span>
                   <span>
-                    {((Number(form.watch("amount") || 0) * 100) / priceA).toFixed(2)} FLOW
+                    {selectedTeam === "Patriots" ? matchPriceA.toFixed(2) : matchPriceB.toFixed(2)}
+                  </span>
+                </div>
+                <div className="flex justify-between text-[#666]">
+                  <span>Cotas:</span>
+                  <span>
+                    {((Number(form.watch("amount") || 0) * 100) / 
+                      (selectedTeam === "Patriots" ? matchPriceA : matchPriceB)).toFixed(2)}
+                  </span>
+                </div>
+                <div className="flex justify-between text-[#666]">
+                  <span>Retorno:</span>
+                  <span>
+                    {((Number(form.watch("amount") || 0) * 100) / 
+                      (selectedTeam === "Patriots" ? matchPriceA : matchPriceB)).toFixed(2)}
                     {" ("}
-                    {(((Number(form.watch("amount")) / priceA) * 100 -
+                    {(((Number(form.watch("amount")) / 
+                      (selectedTeam === "Patriots" ? matchPriceA : matchPriceB)) * 100 -
                       Number(form.watch("amount"))) /
-                      Number(form.watch("amount"))) *
-                      100}
-                    {"%) "}
+                      Number(form.watch("amount"))).toFixed(0)}
+                    {"%)"}
                   </span>
                 </div>
               </div>
@@ -288,7 +335,7 @@ export function GamesModal({ isOpen, onClose }: GamesModalProps) {
                 } text-white`}
                 disabled={!form.watch("amount") || parseFloat(form.watch("amount")) <= 0}
               >
-                {isSuccess ? "Aposta Confirmada! ✓" : "Place Bet"}
+                {isSuccess ? "Aposta Confirmada! ✓" : "Fazer Aposta"}
               </Button>
             </div>
           </div>

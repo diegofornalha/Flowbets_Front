@@ -93,7 +93,7 @@ const Home: NextPage = () => {
                       setShowCategories(false);
                     }}
                   >
-                    ⚽ NFL Games
+                    ⚽️ Time A vs Time B
                   </Button>
                 </div>
               )}

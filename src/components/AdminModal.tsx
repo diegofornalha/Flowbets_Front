@@ -17,29 +17,28 @@ interface BetInfo {
   amount: bigint;
   timestamp: bigint;
   isPatriots: boolean;
+  status: number; // 0: Em andamento, 1: Ganhou, 2: Perdeu, 3: CASA
 }
 
 export function AdminModal({ isOpen, onClose }: AdminModalProps) {
   const [activeTab, setActiveTab] = useState<Tab>("settings");
   
-  // Estados para as configurações
-  const [minBet, setMinBet] = useState("0.1");
-  const [maxBet, setMaxBet] = useState("100");
-  const [feePercentage, setFeePercentage] = useState("2.5");
-  const [isGamePaused, setIsGamePaused] = useState(false);
-  const [payoutMultiplier, setPayoutMultiplier] = useState("2");
+  // Leitura da taxa do sistema
+  const { data: feeData } = useReadContract({
+    address: BETTING_CONTRACT_ADDRESS,
+    abi: BETTING_ABI,
+    functionName: "getFeePercentage",
+  });
 
-  // Função para salvar configurações
-  const saveSettings = async () => {
-    try {
-      // Aqui implementaremos as chamadas ao contrato para atualizar as configurações
-      console.log("Salvando configurações...");
-    } catch (error) {
-      console.error("Erro ao salvar configurações:", error);
-    }
-  };
+  // Leitura do volume total
+  const { data: volumeData } = useReadContract({
+    address: BETTING_CONTRACT_ADDRESS,
+    abi: BETTING_ABI,
+    functionName: "viewVolume",
+    args: [],
+  });
 
-  // Consulta o histórico de apostas
+  // Leitura do histórico
   const { data: bettingHistory } = useReadContract({
     address: BETTING_CONTRACT_ADDRESS,
     abi: BETTING_ABI,
@@ -47,61 +46,73 @@ export function AdminModal({ isOpen, onClose }: AdminModalProps) {
     args: [],
   });
 
-  // Função para formatar o endereço da carteira
-  const formatAddress = (address: string) => {
-    return `${address.slice(0, 6)}...${address.slice(-4)}`;
+  // Leitura dos valores
+  const { data: distributionData } = useReadContract({
+    address: BETTING_CONTRACT_ADDRESS,
+    abi: BETTING_ABI,
+    functionName: "getDistributionValues",
+    args: [],
+  });
+
+  // Cálculo das porcentagens
+  const totalValue = distributionData ? 
+    Number(distributionData[0]) + Number(distributionData[1]) : 0;
+
+  const ganhadores = {
+    valor: distributionData ? Number(distributionData[0]) / 1e18 : 0,
+    percentual: totalValue > 0 ? 
+      (Number(distributionData?.[0]) / totalValue * 100).toFixed(2) : "0"
   };
 
-  // Função para formatar o timestamp em formato tabela
+  const casa = {
+    valor: distributionData ? Number(distributionData[1]) / 1e18 : 0,
+    percentual: totalValue > 0 ? 
+      (Number(distributionData?.[1]) / totalValue * 100).toFixed(2) : "0"
+  };
+
+  // Calcula o volume total
+  const totalVolume = volumeData ? 
+    Number(volumeData[0]) + Number(volumeData[1]) : 0;
+
+  // Funções de formatação
   const formatDate = (timestamp: bigint) => {
     const date = new Date(Number(timestamp) * 1000);
-    const formattedDate = date.toLocaleDateString('pt-BR', {
+    return date.toLocaleDateString('pt-BR', {
       day: '2-digit',
       month: '2-digit',
       year: 'numeric',
-    });
-    const formattedTime = date.toLocaleTimeString('pt-BR', {
       hour: '2-digit',
       minute: '2-digit',
       hour12: false
     });
-    return (
-      <div className="flex flex-col">
-        <span className="font-medium text-[#333]">{formattedDate}</span>
-        <span className="text-[#666] text-sm">{formattedTime}</span>
-      </div>
-    );
   };
 
-  // Função para formatar o valor em FLOW
   const formatAmount = (amount: bigint) => {
     return (Number(amount) / 1e18).toFixed(4);
   };
 
-  // Dados mockados para o histórico
-  const mockHistory = [
-    {
-      bettor: "0x1234...5789",
-      amount: BigInt(5 * 1e18), // 5 FLOW
-      timestamp: BigInt(Math.floor(Date.now() / 1000 - 3600)), // 1 hora atrás
-      isPatriots: true,
-    },
-    {
-      bettor: "0x1234...5789",
-      amount: BigInt(2.5 * 1e18), // 2.5 FLOW
-      timestamp: BigInt(Math.floor(Date.now() / 1000 - 7200)), // 2 horas atrás
-      isPatriots: false,
-    },
-    {
-      bettor: "0x1234...5789",
-      amount: BigInt(10 * 1e18), // 10 FLOW
-      timestamp: BigInt(Math.floor(Date.now() / 1000 - 86400)), // 1 dia atrás
-      isPatriots: true,
-    },
-  ];
+  // Histórico para exibição
+  const displayHistory = bettingHistory || [];
 
-  // Usar os dados mockados se não houver dados reais
-  const displayHistory = bettingHistory?.length ? bettingHistory : mockHistory;
+  const getStatusText = (status: number) => {
+    switch (status) {
+      case 0: return 'Em andamento';
+      case 1: return 'Ganhou';
+      case 2: return 'Perdeu';
+      case 3: return 'CASA';
+      default: return 'Desconhecido';
+    }
+  };
+
+  const getStatusColor = (status: number) => {
+    switch (status) {
+      case 0: return 'text-yellow-500';  // Em andamento
+      case 1: return 'text-green-500';   // Ganhou
+      case 2: return 'text-red-500';     // Perdeu
+      case 3: return 'text-purple-500';  // CASA
+      default: return 'text-gray-500';
+    }
+  };
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Painel Administrativo">
@@ -133,93 +144,41 @@ export function AdminModal({ isOpen, onClose }: AdminModalProps) {
       <div className="max-w-[1200px] mx-auto">
         {activeTab === "settings" ? (
           <div className="bg-white rounded-lg p-6">
-            <h3 className="text-lg font-semibold mb-6">Configurações de Apostas</h3>
-            <div className="space-y-6">
-              {/* Limites de Apostas */}
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-[#333]">
-                    Aposta Mínima (FLOW)
-                  </label>
-                  <input
-                    type="number"
-                    value={minBet}
-                    onChange={(e) => setMinBet(e.target.value)}
-                    className="w-full p-2 border rounded-lg bg-[#f5f5f5]"
-                    step="0.1"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-[#333]">
-                    Aposta Máxima (FLOW)
-                  </label>
-                  <input
-                    type="number"
-                    value={maxBet}
-                    onChange={(e) => setMaxBet(e.target.value)}
-                    className="w-full p-2 border rounded-lg bg-[#f5f5f5]"
-                    step="1"
-                  />
+            <h3 className="text-lg font-semibold mb-6">% de ganhos sobre as negociações</h3>
+            <div className="grid grid-cols-2 gap-4 mb-6">
+              <div className="p-4 bg-[#f5f5f5] rounded-lg">
+                <div className="text-lg font-semibold text-[#333]">
+                  {feeData ? Number(feeData) / 100 : 0}%
                 </div>
               </div>
-
-              {/* Taxa e Multiplicador */}
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-[#333]">
-                    Taxa do Sistema (%)
-                  </label>
-                  <input
-                    type="number"
-                    value={feePercentage}
-                    onChange={(e) => setFeePercentage(e.target.value)}
-                    className="w-full p-2 border rounded-lg bg-[#f5f5f5]"
-                    step="0.1"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-[#333]">
-                    Multiplicador de Pagamento
-                  </label>
-                  <input
-                    type="number"
-                    value={payoutMultiplier}
-                    onChange={(e) => setPayoutMultiplier(e.target.value)}
-                    className="w-full p-2 border rounded-lg bg-[#f5f5f5]"
-                    step="0.1"
-                  />
+              <div className="p-4 bg-[#f5f5f5] rounded-lg">
+                <div className="text-lg font-semibold text-[#333]">
+                  {((totalVolume * (feeData ? Number(feeData) / 10000 : 0)) / 1e18).toFixed(4)}
                 </div>
               </div>
+            </div>
 
-              {/* Controles do Jogo */}
-              <div className="space-y-4">
-                <div className="flex items-center justify-between p-4 bg-[#f5f5f5] rounded-lg">
-                  <div>
-                    <h4 className="font-medium text-[#333]">Status do Jogo</h4>
-                    <p className="text-sm text-[#666]">
-                      {isGamePaused ? "Apostas Pausadas" : "Apostas Ativas"}
-                    </p>
+            {/* Informações de Ganhadores e Casa */}
+            <div className="space-y-4">
+              <div className="p-4 bg-[#f5f5f5] rounded-lg">
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-[#666]">Ganhadores</span>
+                  <div className="text-right">
+                    <div className="text-lg font-semibold text-[#333]">{ganhadores.percentual}%</div>
+                    <div className="text-sm text-[#666]">{ganhadores.valor.toFixed(4)}</div>
                   </div>
-                  <Button
-                    onClick={() => setIsGamePaused(!isGamePaused)}
-                    className={`${
-                      isGamePaused
-                        ? "bg-[#dc2626] hover:bg-[#b91c1c]"
-                        : "bg-[#10b981] hover:bg-[#0d9668]"
-                    } text-white`}
-                  >
-                    {isGamePaused ? "Retomar Apostas" : "Pausar Apostas"}
-                  </Button>
                 </div>
               </div>
 
-              {/* Botão Salvar */}
-              <Button
-                onClick={saveSettings}
-                className="w-full bg-[#007aff] hover:bg-[#0056b3] text-white mt-6"
-              >
-                Salvar Configurações
-              </Button>
+              <div className="p-4 bg-[#f5f5f5] rounded-lg">
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-[#666]">Casa</span>
+                  <div className="text-right">
+                    <div className="text-lg font-semibold text-[#333]">{casa.percentual}%</div>
+                    <div className="text-sm text-[#666]">{casa.valor.toFixed(4)}</div>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         ) : (
@@ -232,7 +191,8 @@ export function AdminModal({ isOpen, onClose }: AdminModalProps) {
                     <th className="text-left p-3">Data</th>
                     <th className="text-left p-3">Apostador</th>
                     <th className="text-left p-3">Time</th>
-                    <th className="text-right p-3">Valor (FLOW)</th>
+                    <th className="text-right p-3">Valor</th>
+                    <th className="text-center p-3">Status</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -247,6 +207,9 @@ export function AdminModal({ isOpen, onClose }: AdminModalProps) {
                       <td className="p-3">{bet.bettor}</td>
                       <td className="p-3">{bet.isPatriots ? "Patriots" : "Jaguars"}</td>
                       <td className="p-3 text-right">{formatAmount(bet.amount)}</td>
+                      <td className={`p-3 text-center ${getStatusColor(bet.status)}`}>
+                        {getStatusText(bet.status)}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
