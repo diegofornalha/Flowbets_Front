@@ -74,4 +74,39 @@ export const BETTING_ABI = [
     stateMutability: "payable",
     type: "function",
   },
+  {
+    inputs: [],
+    name: "getBettingHistory",
+    outputs: [
+      {
+        components: [
+          {
+            internalType: "address",
+            name: "bettor",
+            type: "address",
+          },
+          {
+            internalType: "uint256",
+            name: "amount",
+            type: "uint256",
+          },
+          {
+            internalType: "uint256",
+            name: "timestamp",
+            type: "uint256",
+          },
+          {
+            internalType: "bool",
+            name: "isPatriots",
+            type: "bool",
+          }
+        ],
+        internalType: "struct Betting.BetInfo[]",
+        name: "",
+        type: "tuple[]",
+      },
+    ],
+    stateMutability: "view",
+    type: "function",
+  },
 ] as const; 
